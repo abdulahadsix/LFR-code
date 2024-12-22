@@ -1,0 +1,227 @@
+#define enA 10 // Enable1 L298 Pin enA 
+#define in1 9  // Motor1 L298 Pin in1 
+#define in2 8  // Motor1 L298 Pin in2 
+#define in3 7  // Motor2 L298 Pin in3 
+#define in4 6  // Motor2 L298 Pin in4 
+#define enB 5  // Enable2 L298 Pin enB 
+
+// Define IR sensors
+#define R2 A0 // Far Right sensor
+#define R1 A1 // Right sensor
+#define C  A2 // Center sensor
+#define L1 A3 // Left sensor
+#define L2 A4 // Far Left sensor
+
+// Define obstacle detection pins
+#define trigPin 12 // Ultrasonic sensor trigger pin
+#define echoPin 11 // Ultrasonic sensor echo pin
+
+// Speed settings
+int forwardSpeed = 80;
+int turnSpeed = 50;
+int reverseSpeed = 40;
+
+// Variable to track if the checkpoint has been reached
+bool checkpointFlag = false;
+
+void setup() {
+  // Initialize Serial Monitor
+  Serial.begin(9600);
+
+  // Declare sensors as input  
+  pinMode(R2, INPUT); 
+  pinMode(R1, INPUT);
+  pinMode(C, INPUT);
+  pinMode(L1, INPUT);
+  pinMode(L2, INPUT);
+
+  // Declare motor pins as output for L298N
+  pinMode(enA, OUTPUT); 
+  pinMode(in1, OUTPUT); 
+  pinMode(in2, OUTPUT); 
+  pinMode(in3, OUTPUT);   
+  pinMode(in4, OUTPUT); 
+  pinMode(enB, OUTPUT); 
+
+  // Declare ultrasonic sensor pins
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  // Initial motor speed (Duty Cycle)
+  analogWrite(enA, forwardSpeed); 
+  analogWrite(enB, forwardSpeed); 
+  delay(1000);
+}
+
+void loop() {  
+  // Read sensor values
+  int rightMost = digitalRead(R2);
+  int right = digitalRead(R1);
+  int center = digitalRead(C);
+  int left = digitalRead(L1);
+  int leftMost = digitalRead(L2);
+
+  // Print sensor values for debugging
+  Serial.print("L2: "); Serial.print(leftMost);
+  Serial.print(" | L1: "); Serial.print(left);
+  Serial.print(" | C: "); Serial.print(center);
+  Serial.print(" | R1: "); Serial.print(right);
+  Serial.print(" | R2: "); Serial.println(rightMost);
+
+  // Check for obstacle
+  if (detectObstacle()) {
+    Stop();
+    Serial.println("Obstacle detected! Searching for a new path...");
+    searchLine();
+    return; // Exit loop to avoid additional processing
+  }
+
+  // Check for the checkpoint
+  if (checkpointDetected(left, leftMost, center)) {
+    Stop();
+    delay(3000); // Stop for 3 seconds at the checkpoint
+    checkpointFlag = true; // Mark checkpoint as handled
+    slightRight();
+    delay(200);
+    forward();
+    delay(200);
+  }
+
+  // Control logic for line following
+  if (center == 0 && left == 1 && right == 1) {
+    forward(); // Go forward when centered on the line
+  } 
+  else if (left == 0 && center == 1) {
+    slightRight(); // Slight left adjustment
+  } 
+  else if (right == 0 && center == 1) {
+    slightLeft(); // Slight right adjustment
+  } 
+  else if (leftMost == 0 && left == 0 && center == 0) {
+    hardRight(); // Sharp left turn for 90-degree turns
+  } 
+  else if (rightMost == 0 && right == 0 && center == 0) {
+    hardLeft(); // Sharp right turn for 90-degree turns
+  } 
+  else if (leftMost == 1 && rightMost == 1 && left == 1 && right == 1 && center == 1) {
+    searchLine(); // Search for the line if no sensors detect it
+  }
+
+  delay(100); // Small delay to make Serial output readable
+}
+
+// Function to detect the checkpoint
+bool checkpointDetected(int left, int leftMost, int center) {
+  // The checkpoint is detected only when both left and far-left sensors are on the line
+  return !checkpointFlag && (left == 0 && leftMost == 0 && center == 0);
+}
+
+// Function to detect obstacles using ultrasonic sensor
+bool detectObstacle() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH);
+  int distance = duration * 0.034 / 2; // Calculate distance in cm
+
+  Serial.print("Obstacle Distance: ");
+  Serial.println(distance);
+
+  return (distance > 0 && distance < 15); // Trigger if an obstacle is detected within 15 cm
+}
+
+// Movement Functions
+void forward() {
+  analogWrite(enA, forwardSpeed); 
+  analogWrite(enB, forwardSpeed); 
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);  
+  digitalWrite(in3, HIGH);  
+  digitalWrite(in4, LOW); 
+}
+
+void slightRight() {
+  analogWrite(enA, turnSpeed); 
+  analogWrite(enB, forwardSpeed);
+  digitalWrite(in1, HIGH);  
+  digitalWrite(in2, LOW);   
+  digitalWrite(in3, HIGH);  
+  digitalWrite(in4, LOW); 
+}
+
+void slightLeft() {
+  analogWrite(enA, forwardSpeed); 
+  analogWrite(enB, turnSpeed); 
+  digitalWrite(in1, LOW); 
+  digitalWrite(in2, HIGH);  
+  digitalWrite(in3, LOW); 
+  digitalWrite(in4, HIGH);  
+}
+
+void hardRight() {
+  analogWrite(enA, turnSpeed); 
+  analogWrite(enB, turnSpeed);
+  digitalWrite(in1, HIGH);  
+  digitalWrite(in2, LOW);   
+  digitalWrite(in3, LOW);   
+  digitalWrite(in4, HIGH);  
+  delay(200); 
+}
+
+void hardLeft() {
+  analogWrite(enA, turnSpeed); 
+  analogWrite(enB, turnSpeed);
+  digitalWrite(in1, LOW);   
+  digitalWrite(in2, HIGH);  
+  digitalWrite(in3, HIGH);  
+  digitalWrite(in4, LOW);   
+  delay(200); 
+}
+
+void Stop() {
+  analogWrite(enA, 0);
+  analogWrite(enB, 0);
+  digitalWrite(in1, LOW); 
+  digitalWrite(in2, LOW); 
+  digitalWrite(in3, LOW); 
+  digitalWrite(in4, LOW); 
+}
+
+void reverse() {
+  analogWrite(enA, reverseSpeed); 
+  analogWrite(enB, reverseSpeed);
+  digitalWrite(in1, LOW);  
+  digitalWrite(in2, HIGH);   
+  digitalWrite(in3, HIGH);   
+  digitalWrite(in4, LOW);  
+}
+
+void searchLine() {
+  Stop();
+  delay(500);
+  for (int i = 0; i < 3; i++) { 
+    reverse();
+    delay(360);
+    if (lineDetected()) return;
+
+    slightLeft();
+    delay(200);
+    if (lineDetected()) return;
+
+    slightRight();
+    delay(300);
+    if (lineDetected()) return;
+
+    slightLeft();
+    delay(200);
+    if (lineDetected()) return;
+  }
+  Stop();
+}
+
+bool lineDetected() {
+  return (digitalRead(L2) == 0 || digitalRead(L1) == 0 || digitalRead(C) == 0 || digitalRead(R1) == 0 || digitalRead(R2) == 0);
+}
